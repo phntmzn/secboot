@@ -63,3 +63,36 @@ Expected output:
 ---
 
 If you'd like, I can generate the full set of commands as a script or integrate it into your README! Let me know 🚀.
+
+✅ To make sure your `secboot.py` script is executable, run:
+
+```bash
+chmod +x /Users/x86/Public/secboot.py
+```
+
+---
+
+### 📌 What this does:
+This adds the **execute permission**:
+```
+-rwxr-xr-x  1 x86  staff  ...
+```
+➡ Owner (`x86`) can read, write, and execute  
+➡ Group (`staff`) and others can read and execute  
+
+---
+
+### 🔍 To verify:
+```bash
+ls -l /Users/x86/Public/secboot.py
+```
+Expected output:
+```
+-rwxr-xr-x  1 x86  staff  [size] [date] secboot.py
+```
+
+---
+
+⚠ **Note:** Since this script runs via `launchd` as root, make sure the script is safe and doesn't contain unintended commands.  
+
+If you'd like help generating this as a one-liner or bundling into your setup instructions, let me know! 🚀
